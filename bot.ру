@@ -1,0 +1,75 @@
+import os
+import sys
+import asyncio
+import json
+import traceback
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import CommandStart
+from aiohttp import web
+
+TOKEN = "8814200479:AAHp7YU76RZ8ZhkWzWsIPF7x9gWDlv0mC-4"
+MY_ID = 8389699824
+
+print("===== БОТ СТАРТУЕТ =====")
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+# Простой веб-ответ
+async def handle(request):
+    return web.Response(text="Bot is running")
+
+# /start
+@dp.message(CommandStart())
+async def start(message: types.Message):
+    print(f">>> Получен /start от {message.from_user.id}")
+    await message.answer("Привет! Открой магазин через кнопку Меню 👇")
+
+# Универсальный обработчик ВСЕХ сообщений (ловим всё)
+@dp.message()
+async def catch_all(message: types.Message):
+    print("=== НОВОЕ СООБЩЕНИЕ ===")
+    print(f"От: {message.from_user.id}")
+    print(f"Тип контента: {message.content_type}")
+    print(f"Текст: {message.text}")
+    print(f"Есть web_app_data: {message.web_app_data is not None}")
+    if message.web_app_data:
+        print(f"Данные: {message.web_app_data.data[:200]}...")
+        try:
+            data = json.loads(message.web_app_data.data)
+            order = data['order']
+            total = data['total']
+            text = "🛒 Новый заказ!\n\n"
+            for item in order:
+                text += f"• {item['name']} x{item['qty']} — {item['price']}₽\n"
+            text += f"\n💰 Итого: {total}₽"
+            await bot.send_message(MY_ID, text)
+            await message.answer("✅ Заказ принят! Скоро свяжусь с вами.")
+            print(">>> Заказ успешно обработан")
+        except Exception as e:
+            print(f"!!! Ошибка обработки заказа: {e}")
+            traceback.print_exc()
+    else:
+        # На всякий случай отвечаем
+        await message.answer("Сообщение получено, но я не знаю что с ним делать 😢")
+    print("========================")
+
+async def main():
+    print(">>> Запуск веб-сервера...")
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get('PORT', 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f">>> Веб-сервер на порту {port}")
+    print(">>> Запуск поллинга...")
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        print("!!! КРИТИЧЕСКАЯ ОШИБКА:")
+        traceback.print_exc()
+        sys.exit(1)
